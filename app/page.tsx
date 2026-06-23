@@ -2,44 +2,43 @@
 
 import { useState } from "react";
 
-const fakeStories = [
-  {
-    title: "Steam Ownership Debate Heats Up Again",
-    source: "Steam News",
-    storyArc: "Game Ownership",
-    contentScore: 92,
-    timeScore: 81,
-    freshness: "Hot",
-    recommended: "Review",
-    whyGamersCare:
-      "This affects what players actually own when they buy digital games.",
-  },
-  {
-    title: "Pokemon Card Retailers Tighten Purchase Limits",
-    source: "Retail / Pokemon",
-    storyArc: "Pokemon",
-    contentScore: 84,
-    timeScore: 72,
-    freshness: "Warm",
-    recommended: "Monitor",
-    whyGamersCare:
-      "Scalpers and reseller policies affect normal fans trying to buy cards.",
-  },
-  {
-    title: "AI Tools Continue Changing Creator Workflows",
-    source: "OpenAI News",
-    storyArc: "AI & Creators",
-    contentScore: 88,
-    timeScore: 65,
-    freshness: "Stable",
-    recommended: "Banked",
-    whyGamersCare:
-      "Creators are using AI to speed up production, editing, and research.",
-  },
-];
+type Story = {
+  title: string;
+  source: string;
+  storyArc: string;
+  contentScore: number;
+  timeScore: number;
+  freshness: string;
+  recommended: string;
+  whyGamersCare: string;
+};
 
 export default function Home() {
-  const [stories, setStories] = useState<typeof fakeStories>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  async function runJimmy() {
+    setLoading(true);
+
+    const response = await fetch("/api/gamesmith/run-jimmy");
+    const data = await response.json();
+
+    setStories(data.stories);
+    setLoading(false);
+  }
+
+  async function resetMemory() {
+    setResetting(true);
+
+    await fetch("/api/gamesmith/reset-memory", {
+      method: "POST",
+    });
+
+    setStories([]);
+    setResetting(false);
+    alert("Jimmy memory cleared");
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-white">
@@ -49,33 +48,45 @@ export default function Home() {
       <section className="mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
         <h2 className="text-2xl font-semibold">Jimmy Research Director</h2>
         <p className="mt-2 text-slate-300">
-          Jimmy finds stories, scores them, and prepares them for William&apos;s review.
+          Jimmy finds stories, scores them, and prepares them for William&apos;s
+          review.
         </p>
 
-        <button
-          onClick={async () => {
-            const response = await fetch("/api/gamesmith/run-jimmy");
-          
-            const data = await response.json();
-          
-            setStories(data.stories);
-          }}
-          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white"
-        >
-          Run Jimmy
-        </button>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={runJimmy}
+            disabled={loading}
+            className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+          >
+            {loading ? "Running Jimmy..." : "Run Jimmy"}
+          </button>
+
+          <button
+            onClick={resetMemory}
+            disabled={resetting}
+            className="rounded-lg bg-red-700 px-4 py-2 font-semibold text-white disabled:opacity-50"
+          >
+            {resetting ? "Resetting..." : "Reset Jimmy Memory"}
+          </button>
+        </div>
       </section>
 
       <section className="mt-8 grid gap-4">
         {stories.map((story) => (
           <article
-            key={story.title}
+            key={`${story.source}-${story.title}`}
             className="rounded-xl border border-slate-700 bg-slate-900 p-5"
           >
             <div className="flex flex-wrap gap-2 text-sm">
-              <span className="rounded bg-blue-900 px-2 py-1">{story.storyArc}</span>
-              <span className="rounded bg-slate-800 px-2 py-1">{story.freshness}</span>
-              <span className="rounded bg-slate-800 px-2 py-1">{story.recommended}</span>
+              <span className="rounded bg-blue-900 px-2 py-1">
+                {story.storyArc}
+              </span>
+              <span className="rounded bg-slate-800 px-2 py-1">
+                {story.freshness}
+              </span>
+              <span className="rounded bg-slate-800 px-2 py-1">
+                {story.recommended}
+              </span>
             </div>
 
             <h3 className="mt-3 text-2xl font-bold">{story.title}</h3>
