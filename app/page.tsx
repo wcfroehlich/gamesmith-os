@@ -17,6 +17,17 @@ export default function Home() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const activeStories = stories.filter(
+    (story) => story.recommended !== "Archived" && story.recommended !== "Archive"
+  );
+
+  const archivedStories = stories.filter(
+    (story) => story.recommended === "Archived" || story.recommended === "Archive"
+  );
+
+  const visibleStories = showArchived ? stories : activeStories;
 
   async function runJimmy() {
     setLoading(true);
@@ -68,11 +79,35 @@ export default function Home() {
           >
             {resetting ? "Resetting..." : "Reset Jimmy Memory"}
           </button>
+
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className="rounded-lg bg-slate-700 px-4 py-2 font-semibold text-white"
+          >
+            {showArchived ? "Hide Archived" : "Show Archived"}
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg bg-slate-800 p-4">
+            <p className="text-sm text-slate-400">Active Stories</p>
+            <p className="text-3xl font-bold">{activeStories.length}</p>
+          </div>
+
+          <div className="rounded-lg bg-slate-800 p-4">
+            <p className="text-sm text-slate-400">Archived</p>
+            <p className="text-3xl font-bold">{archivedStories.length}</p>
+          </div>
+
+          <div className="rounded-lg bg-slate-800 p-4">
+            <p className="text-sm text-slate-400">Total Found</p>
+            <p className="text-3xl font-bold">{stories.length}</p>
+          </div>
         </div>
       </section>
 
       <section className="mt-8 grid gap-4">
-        {stories.map((story) => (
+        {visibleStories.map((story) => (
           <article
             key={`${story.source}-${story.title}`}
             className="rounded-xl border border-slate-700 bg-slate-900 p-5"
@@ -97,6 +132,7 @@ export default function Home() {
                 <p className="text-sm text-slate-400">Content</p>
                 <p className="text-2xl font-bold">{story.contentScore}</p>
               </div>
+
               <div>
                 <p className="text-sm text-slate-400">Time</p>
                 <p className="text-2xl font-bold">{story.timeScore}</p>
