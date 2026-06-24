@@ -1,39 +1,6 @@
-import fs from "fs";
-import path from "path";
 import { StoryPackage } from "@/agents/jimmy/types-package";
 import { ArticleRecord, StoryEvent, WatchTarget } from "./types";
-
-const dataDir = path.join(process.cwd(), "data");
-const bankPath = path.join(dataDir, "story-bank.json");
-const archivePath = path.join(dataDir, "story-archive.json");
-const watchListPath = path.join(dataDir, "watch-list.json");
-
-function ensureFile(filePath: string) {
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, "[]");
-  }
-}
-
-function readJson<T>(filePath: string): T[] {
-  ensureFile(filePath);
-
-  const raw = fs.readFileSync(filePath, "utf-8");
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-function writeJson<T>(filePath: string, data: T[]) {
-  ensureFile(filePath);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-}
+import { supabaseAdmin } from "./supabaseAdmin";
 
 function slugify(value: string) {
   return value
@@ -141,53 +108,70 @@ function packageToWatchTarget(storyPackage: StoryPackage): WatchTarget {
   };
 }
 
-export function bankStory(storyPackage: StoryPackage) {
-  const bank = readJson<StoryEvent>(bankPath);
+export async function bankStory(storyPackage: StoryPackage) {
   const event = packageToStoryEvent(storyPackage);
-
-  const updatedBank = [event, ...bank.filter((item) => item.id !== event.id)];
-
-  writeJson(bankPath, updatedBank);
-
-  const watchList = readJson<WatchTarget>(watchListPath);
   const watchTarget = packageToWatchTarget(storyPackage);
 
-  const updatedWatchList = [
-    watchTarget,
-    ...watchList.filter((item) => item.id !== watchTarget.id),
-  ];
+  const { error: bankError } = await supabaseAdmin.from("story_bank").upsert({
+    id: event.id,
+    story: event,
+    updated_at: now(),
+  });
 
-  writeJson(watchListPath, updatedWatchList);
+  if (bankError) throw bankError;
+
+  const { error: watchError } = await supabaseAdmin.from("watch_list").upsert({
+    id: watchTarget.id,
+    watch_target: watchTarget,
+    active: true,
+    updated_at: now(),
+  });
+
+  if (watchError) throw watchError;
 
   return event;
 }
 
-export function rejectStory(storyPackage: StoryPackage) {
-  const archive = readJson<StoryEvent>(archivePath);
+export async function rejectStory(storyPackage: StoryPackage) {
   const event = packageToStoryEvent(storyPackage);
-
   event.status = "Archived";
 
-  const updatedArchive = [
-    event,
-    ...archive.filter((item) => item.id !== event.id),
-  ];
+  const { error } = await supabaseAdmin.from("story_archive").upsert({
+    id: event.id,
+    story: event,
+    updated_at: now(),
+  });
 
-  writeJson(archivePath, updatedArchive);
+  if (error) throw error;
 
   return event;
 }
 
-export function getStoryBank() {
-  return readJson<StoryEvent>(bankPath);
+export async function getStoryBank() {
+  const { data, error } = await supabaseAdmin
+    .from("story_bank")
+    .select("story")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => row.story as StoryEvent);
 }
 
-export function getWatchList() {
-  return readJson<WatchTarget>(watchListPath);
+export async function getWatchList() {
+  const { data, error } = await supabaseAdmin
+    .from("watch_list")
+    .select("watch_target")
+    .eq("active", true)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => row.watch_target as WatchTarget);
 }
 
-export function exportJimmyBufferTSV() {
-  const bank = getStoryBank();
+export async function exportJimmyBufferTSV() {
+  const bank = await getStoryBank();
 
   const headers = [
     "Date Found",
@@ -218,9 +202,7 @@ export function exportJimmyBufferTSV() {
 
   const rows = bank.map((story) => {
     const sourceNames = unique(story.articles.map((article) => article.source));
-    const sourceUrls = unique(
-      story.articles.map((article) => article.url || "")
-    );
+    const sourceUrls = unique(story.articles.map((article) => article.url || ""));
 
     const evidenceSummary = story.articles
       .map((article) => `${article.source}: ${article.title}`)

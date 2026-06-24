@@ -1,0 +1,8 @@
+{
+    "crons": [
+      {
+        "path": "/api/gamesmith/daily-run",
+        "schedule": "0 13 * * *"
+      }
+    ]
+  }

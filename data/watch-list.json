@@ -1,1 +1,134 @@
-[]
+[
+  {
+    "id": "gaming-consumer-rights-valve-ends-retail-gift-card-program-amid-fraud-concerns",
+    "label": "Valve Ends Retail Gift Card Program Amid Fraud Concerns",
+    "domain": "Gaming Consumer Rights",
+    "story_arc": "Gaming Consumer Rights",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "Valve Ends Retail Gift Card Program Amid Fraud Concerns",
+      "Gaming Consumer Rights",
+      "Monetization",
+      "Announcement of retail gift card program termination",
+      "Fraud issues prompting the decision",
+      "Impact on legitimate consumers using physical cash"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:18:42.003Z",
+    "updated_at": "2026-06-24T04:18:42.003Z"
+  },
+  {
+    "id": "gaming-industry-tencent-s-divestment-from-japanese-studios-signals-industry-shift",
+    "label": "Tencent's Divestment from Japanese Studios Signals Industry Shift",
+    "domain": "Gaming Industry",
+    "story_arc": "Gaming Industry",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "Tencent's Divestment from Japanese Studios Signals Industry Shift",
+      "Gaming Industry",
+      "Corporate Power",
+      "Tencent's investment spree in Japan at the decade's start",
+      "Current talks to divest from studios like Marvelous",
+      "Potential financial losses and strategic portfolio refocus"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:18:38.419Z",
+    "updated_at": "2026-06-24T04:18:38.419Z"
+  },
+  {
+    "id": "gaming-industry-ea-staff-layoffs-and-saudi-buyout-impact-industry-stability",
+    "label": "EA Staff Layoffs and Saudi Buyout Impact Industry Stability",
+    "domain": "Industry Labor",
+    "story_arc": "Gaming Industry",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "EA Staff Layoffs and Saudi Buyout Impact Industry Stability",
+      "Gaming Industry",
+      "Industry Labor",
+      "Corporate Power",
+      "Multiple rounds of EA layoffs in 2026",
+      "Layoffs impact various support and development teams",
+      "Saudi Arabian leveraged buyout of EA nearing completion"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:16:45.391Z",
+    "updated_at": "2026-06-24T04:16:45.391Z"
+  },
+  {
+    "id": "gaming-industry-steam-machine-launch-and-pricing-reveal",
+    "label": "Steam Machine Launch and Pricing Reveal",
+    "domain": "Game Ownership",
+    "story_arc": "Gaming Industry",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "Steam Machine Launch and Pricing Reveal",
+      "Gaming Industry",
+      "Game Ownership",
+      "Technology & Hardware",
+      "Valve's Steam Machine pricing and availability announcement",
+      "Consumer reaction to high price and limited supply",
+      "Valve's strategy to ease purchase frustration with randomized queue"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:16:40.480Z",
+    "updated_at": "2026-06-24T04:16:40.480Z"
+  },
+  {
+    "id": "technology-ai-ai-s-growing-role-in-game-development-and-regulation-challenges",
+    "label": "AI's Growing Role in Game Development and Regulation Challenges",
+    "domain": "AI & Creators",
+    "story_arc": "Technology & AI",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "AI's Growing Role in Game Development and Regulation Challenges",
+      "Technology & AI",
+      "AI & Creators",
+      "Creator Economy",
+      "EA execs praise AI for boosting creativity and prototyping speed",
+      "Anthropic faces government sanctions over AI model use and export controls",
+      "OpenAI launches security tools and supports AI standards development",
+      "Concerns over player data use in AI training and platform exclusivity",
+      "Godot engine's stance on AI assistance in development"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:16:35.204Z",
+    "updated_at": "2026-06-24T04:16:35.204Z"
+  },
+  {
+    "id": "gaming-consumer-rights-blizzard-reverses-controversial-diablo-4-loot-changes-after-player-backlash",
+    "label": "Blizzard Reverses Controversial Diablo 4 Loot Changes After Player Backlash",
+    "domain": "Gaming Consumer Rights",
+    "story_arc": "Gaming Consumer Rights",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "Blizzard Reverses Controversial Diablo 4 Loot Changes After Player Backlash",
+      "Gaming Consumer Rights",
+      "Gaming Culture",
+      "Announcement of loot nerfs in Diablo 4 Season of Death Awakening",
+      "Community backlash and criticism",
+      "Blizzard's reversal and updated season plans"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:16:16.693Z",
+    "updated_at": "2026-06-24T04:16:16.693Z"
+  },
+  {
+    "id": "gaming-consumer-rights-uk-social-media-ban-for-under-16s-sparks-consumer-rights-concerns",
+    "label": "UK Social Media Ban for Under-16s Sparks Consumer Rights Concerns",
+    "domain": "Consumer Rights",
+    "story_arc": "Gaming Consumer Rights",
+    "search_mode": "Arc Watch",
+    "watch_terms": [
+      "UK Social Media Ban for Under-16s Sparks Consumer Rights Concerns",
+      "Gaming Consumer Rights",
+      "Consumer Rights",
+      "Gaming Culture",
+      "Introduction of the under-16 social media ban in UK legislation",
+      "Concerns about privacy-invasive age verification methods",
+      "Potential loss of access to gaming-related social content and communities"
+    ],
+    "active": true,
+    "created_at": "2026-06-24T04:15:07.284Z",
+    "updated_at": "2026-06-24T04:15:07.284Z"
+  }
+]

@@ -1,11 +1,6 @@
 // ==================================================
 // JIMMY AGENT
 // Gamesmith Research Director
-//
-// v1.0 Mission:
-// Discover new story events,
-// package them into editorial intelligence,
-// and prepare them for William's review.
 // ==================================================
 
 import fs from "fs";
@@ -14,6 +9,11 @@ import Parser from "rss-parser";
 import { analyzeStory } from "./analyze";
 import { packageStories } from "./packageStories";
 import { ArticleForPackaging, StoryPackage } from "./types-package";
+import {
+  JimmyMemoryItem,
+  loadJimmyMemory,
+  saveJimmyMemoryItems,
+} from "@/lib/jimmyMemory";
 
 const parser = new Parser();
 
@@ -31,13 +31,6 @@ type JimmySource = {
   active: boolean;
 };
 
-type JimmyMemoryItem = {
-  url: string;
-  title: string;
-  source: string;
-  dateSeen: string;
-};
-
 type JimmyConfig = {
   bootstrapMode: boolean;
   bootstrapStartDate: string;
@@ -47,7 +40,6 @@ type JimmyConfig = {
 };
 
 const sourcesPath = path.join(process.cwd(), "data", "gamesmith-sources.json");
-const memoryPath = path.join(process.cwd(), "data", "jimmy-memory.json");
 const configPath = path.join(process.cwd(), "data", "jimmy-config.json");
 
 function loadConfig(): JimmyConfig {
@@ -55,7 +47,7 @@ function loadConfig(): JimmyConfig {
     return {
       bootstrapMode: false,
       bootstrapStartDate: "2026-01-01",
-      maintenanceDays: 7,
+      maintenanceDays: 1,
       maxItemsPerSource: 10,
       includePredictiveSources: false,
     };
@@ -66,7 +58,7 @@ function loadConfig(): JimmyConfig {
   return {
     bootstrapMode: false,
     bootstrapStartDate: "2026-01-01",
-    maintenanceDays: 7,
+    maintenanceDays: 1,
     maxItemsPerSource: 10,
     includePredictiveSources: false,
     ...JSON.parse(raw),
@@ -83,15 +75,6 @@ function loadSources(config: JimmyConfig): JimmySource[] {
       return source.source_role !== "predictive";
     })
     .sort((a: JimmySource, b: JimmySource) => a.tier - b.tier);
-}
-
-function loadMemory(): JimmyMemoryItem[] {
-  const raw = fs.readFileSync(memoryPath, "utf-8");
-  return JSON.parse(raw);
-}
-
-function saveMemory(memory: JimmyMemoryItem[]) {
-  fs.writeFileSync(memoryPath, JSON.stringify(memory, null, 2));
 }
 
 function hasSeenStory(memory: JimmyMemoryItem[], url?: string) {
@@ -116,15 +99,11 @@ function getSinceDate(config: JimmyConfig) {
 function getItemDate(item: Parser.Item) {
   const dateText = item.isoDate || item.pubDate;
 
-  if (!dateText) {
-    return null;
-  }
+  if (!dateText) return null;
 
   const itemDate = new Date(dateText);
 
-  if (Number.isNaN(itemDate.getTime())) {
-    return null;
-  }
+  if (Number.isNaN(itemDate.getTime())) return null;
 
   return itemDate;
 }
@@ -133,7 +112,8 @@ export async function runJimmy(): Promise<StoryPackage[]> {
   const config = loadConfig();
   const articleRecords: ArticleForPackaging[] = [];
   const sources = loadSources(config);
-  const memory = loadMemory();
+  const memory = await loadJimmyMemory();
+  const newMemoryItems: JimmyMemoryItem[] = [];
   const sinceDate = getSinceDate(config);
 
   for (const source of sources) {
@@ -163,12 +143,15 @@ export async function runJimmy(): Promise<StoryPackage[]> {
           const analysisRaw = await analyzeStory(title, summary);
           const analysis = JSON.parse(analysisRaw || "{}");
 
-          memory.push({
+          const memoryItem = {
             url: url || title,
             title,
             source: source.name,
             dateSeen: new Date().toISOString(),
-          });
+          };
+
+          newMemoryItems.push(memoryItem);
+          memory.push(memoryItem);
 
           return {
             title,
@@ -194,7 +177,7 @@ export async function runJimmy(): Promise<StoryPackage[]> {
     }
   }
 
-  saveMemory(memory);
+  await saveJimmyMemoryItems(newMemoryItems);
 
   const packages = await packageStories(articleRecords);
 

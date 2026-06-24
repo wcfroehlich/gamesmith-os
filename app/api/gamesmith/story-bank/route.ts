@@ -2,7 +2,7 @@ import { getStoryBank, getWatchList } from "@/lib/storyVault";
 
 export async function GET() {
   return Response.json({
-    bank: getStoryBank(),
-    watchList: getWatchList(),
+    bank: await getStoryBank(),
+    watchList: await getWatchList(),
   });
 }
