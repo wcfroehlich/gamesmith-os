@@ -7,7 +7,11 @@ export type StoryStatus =
   | "Expired"
   | "Archived";
 
-export type SearchMode = "Discovery" | "Arc Watch" | "Adjacency";
+export type SearchMode =
+  | "Discovery"
+  | "Arc Watch"
+  | "Adjacency"
+  | "Emerging Signals";
 
 export type GamesmithDomain = {
   id: string;
@@ -22,6 +26,13 @@ export type SourceRecord = {
   url: string;
   tier: number;
   source_type: string;
+  source_role:
+    | "origin"
+    | "analysis"
+    | "mission"
+    | "discovery"
+    | "planned_origin"
+    | "predictive";
   active: boolean;
 };
 
@@ -44,18 +55,35 @@ export type StoryEvent = {
   story_arc: string;
   package_type: string;
   status: StoryStatus;
+
   content_score: number;
   time_score: number;
   importance_score: number;
+
   verification_status: string;
   confidence_score: number;
   sponsorship_risk: string;
   bias_risk: string;
+
+  freshness_status: string;
+  recommended_state: string;
+  expiration_date: string;
+
   why_gamers_care: string;
   why_it_cannot_be_ignored: string;
+
+  who_benefits: string;
+  who_pays: string;
+  ownership_notes: string;
+  talent_notes: string;
+  tension_notes: string;
+  consequence_notes: string;
+  score_reasoning: string;
+
   source_count: number;
   article_count: number;
   articles: ArticleRecord[];
+
   created_at: string;
   updated_at: string;
 };

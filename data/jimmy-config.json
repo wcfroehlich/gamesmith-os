@@ -1,0 +1,7 @@
+{
+    "bootstrapMode": true,
+    "bootstrapStartDate": "2026-01-01",
+    "maintenanceDays": 7,
+    "maxItemsPerSource": 10,
+    "includePredictiveSources": false
+  }

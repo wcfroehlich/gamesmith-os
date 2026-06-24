@@ -83,6 +83,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [exportText, setExportText] = useState("");
 
   async function runJimmy() {
     setLoading(true);
@@ -104,6 +105,17 @@ export default function Home() {
     setPackages([]);
     setResetting(false);
     alert("Jimmy memory cleared");
+  }
+
+  async function exportBankToBuffer() {
+    const response = await fetch("/api/gamesmith/export-buffer");
+    const text = await response.text();
+
+    setExportText(text);
+
+    await navigator.clipboard.writeText(text);
+
+    alert("Jimmy Buffer export copied. Paste it into the Jimmy Buffer sheet.");
   }
 
   return (
@@ -134,6 +146,13 @@ export default function Home() {
           >
             {resetting ? "Resetting..." : "Reset Jimmy Memory"}
           </button>
+
+          <button
+            onClick={exportBankToBuffer}
+            className="rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white"
+          >
+            Export Bank to Jimmy Buffer
+          </button>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -156,6 +175,19 @@ export default function Home() {
             </p>
           </div>
         </div>
+
+        {exportText && (
+          <div className="mt-5">
+            <p className="mb-2 text-sm text-slate-400">
+              Copied export preview:
+            </p>
+            <textarea
+              value={exportText}
+              readOnly
+              className="h-40 w-full rounded bg-slate-950 p-3 text-xs text-slate-200"
+            />
+          </div>
+        )}
       </section>
 
       <section className="mt-8 grid gap-4">
@@ -293,57 +325,61 @@ export default function Home() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
-  <button
-    onClick={async () => {
-      await fetch("/api/gamesmith/bank-story", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(storyPackage),
-      });
+                <button
+                  onClick={async () => {
+                    await fetch("/api/gamesmith/bank-story", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify(storyPackage),
+                    });
 
-      setPackages((current) =>
-        current.filter((item) => item.story_title !== storyPackage.story_title)
-      );
+                    setPackages((current) =>
+                      current.filter(
+                        (item) => item.story_title !== storyPackage.story_title
+                      )
+                    );
 
-      alert("Story banked");
-    }}
-    className="rounded bg-green-600 px-3 py-2 text-sm font-semibold"
-  >
-    Bank
-  </button>
+                    alert("Story banked");
+                  }}
+                  className="rounded bg-green-600 px-3 py-2 text-sm font-semibold"
+                >
+                  Bank
+                </button>
 
-  <button
-    onClick={async () => {
-      await fetch("/api/gamesmith/reject-story", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(storyPackage),
-      });
+                <button
+                  onClick={async () => {
+                    await fetch("/api/gamesmith/reject-story", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify(storyPackage),
+                    });
 
-      setPackages((current) =>
-        current.filter((item) => item.story_title !== storyPackage.story_title)
-      );
+                    setPackages((current) =>
+                      current.filter(
+                        (item) => item.story_title !== storyPackage.story_title
+                      )
+                    );
 
-      alert("Story archived");
-    }}
-    className="rounded bg-red-600 px-3 py-2 text-sm font-semibold"
-  >
-    Reject
-  </button>
+                    alert("Story archived");
+                  }}
+                  className="rounded bg-red-600 px-3 py-2 text-sm font-semibold"
+                >
+                  Reject
+                </button>
 
-  <button
-    onClick={() =>
-      setExpanded(isExpanded ? null : storyPackage.story_title)
-    }
-    className="rounded bg-slate-700 px-3 py-2 text-sm font-semibold"
-  >
-    {isExpanded ? "Hide Details" : "Expand Details"}
-  </button>
-</div>
+                <button
+                  onClick={() =>
+                    setExpanded(isExpanded ? null : storyPackage.story_title)
+                  }
+                  className="rounded bg-slate-700 px-3 py-2 text-sm font-semibold"
+                >
+                  {isExpanded ? "Hide Details" : "Expand Details"}
+                </button>
+              </div>
 
               {isExpanded && (
                 <div className="mt-5 rounded-lg border border-slate-700 bg-slate-950 p-4">

@@ -2,10 +2,10 @@
 // JIMMY AGENT
 // Gamesmith Research Director
 //
-// v0.3 Mission:
-// Find articles, package them into stories,
-// enforce scoring rules, and present calibrated
-// story packages to William.
+// v1.0 Mission:
+// Discover new story events,
+// package them into editorial intelligence,
+// and prepare them for William's review.
 // ==================================================
 
 import fs from "fs";
@@ -22,6 +22,7 @@ type JimmySource = {
   url: string;
   tier: number;
   source_type: string;
+  source_role?: string;
   mission_fit: string[];
   authority_score: number;
   signal_score: number;
@@ -37,14 +38,50 @@ type JimmyMemoryItem = {
   dateSeen: string;
 };
 
+type JimmyConfig = {
+  bootstrapMode: boolean;
+  bootstrapStartDate: string;
+  maintenanceDays: number;
+  maxItemsPerSource: number;
+  includePredictiveSources: boolean;
+};
+
 const sourcesPath = path.join(process.cwd(), "data", "gamesmith-sources.json");
 const memoryPath = path.join(process.cwd(), "data", "jimmy-memory.json");
+const configPath = path.join(process.cwd(), "data", "jimmy-config.json");
 
-function loadSources(): JimmySource[] {
+function loadConfig(): JimmyConfig {
+  if (!fs.existsSync(configPath)) {
+    return {
+      bootstrapMode: false,
+      bootstrapStartDate: "2026-01-01",
+      maintenanceDays: 7,
+      maxItemsPerSource: 10,
+      includePredictiveSources: false,
+    };
+  }
+
+  const raw = fs.readFileSync(configPath, "utf-8");
+
+  return {
+    bootstrapMode: false,
+    bootstrapStartDate: "2026-01-01",
+    maintenanceDays: 7,
+    maxItemsPerSource: 10,
+    includePredictiveSources: false,
+    ...JSON.parse(raw),
+  };
+}
+
+function loadSources(config: JimmyConfig): JimmySource[] {
   const raw = fs.readFileSync(sourcesPath, "utf-8");
 
   return JSON.parse(raw)
     .filter((source: JimmySource) => source.active)
+    .filter((source: JimmySource) => {
+      if (config.includePredictiveSources) return true;
+      return source.source_role !== "predictive";
+    })
     .sort((a: JimmySource, b: JimmySource) => a.tier - b.tier);
 }
 
@@ -66,28 +103,56 @@ function getStorySummary(item: Parser.Item) {
   return item.contentSnippet || item.content || item.summary || item.title || "";
 }
 
-export async function runJimmy(): Promise<StoryPackage[]> {
-  const articleRecords: ArticleForPackaging[] = [];
-  const sources = loadSources();
-  const memory = loadMemory();
+function getSinceDate(config: JimmyConfig) {
+  if (config.bootstrapMode) {
+    return new Date(config.bootstrapStartDate);
+  }
 
   const sinceDate = new Date();
-  sinceDate.setDate(sinceDate.getDate() - 7);
+  sinceDate.setDate(sinceDate.getDate() - config.maintenanceDays);
+  return sinceDate;
+}
+
+function getItemDate(item: Parser.Item) {
+  const dateText = item.isoDate || item.pubDate;
+
+  if (!dateText) {
+    return null;
+  }
+
+  const itemDate = new Date(dateText);
+
+  if (Number.isNaN(itemDate.getTime())) {
+    return null;
+  }
+
+  return itemDate;
+}
+
+export async function runJimmy(): Promise<StoryPackage[]> {
+  const config = loadConfig();
+  const articleRecords: ArticleForPackaging[] = [];
+  const sources = loadSources(config);
+  const memory = loadMemory();
+  const sinceDate = getSinceDate(config);
 
   for (const source of sources) {
     try {
       const feed = await parser.parseURL(source.url);
 
       const recentItems = feed.items.filter((item) => {
-        if (!item.pubDate) return true;
-        return new Date(item.pubDate) >= sinceDate;
+        const itemDate = getItemDate(item);
+
+        if (!itemDate) return true;
+
+        return itemDate >= sinceDate;
       });
 
       const unseenItems = recentItems.filter((item) => {
         return !hasSeenStory(memory, item.link);
       });
 
-      const items = unseenItems.slice(0, 10);
+      const items = unseenItems.slice(0, config.maxItemsPerSource);
 
       const analyzedArticles: ArticleForPackaging[] = await Promise.all(
         items.map(async (item) => {
@@ -134,6 +199,10 @@ export async function runJimmy(): Promise<StoryPackage[]> {
   const packages = await packageStories(articleRecords);
 
   packages.sort((a, b) => {
+    if (b.editorial_importance.score !== a.editorial_importance.score) {
+      return b.editorial_importance.score - a.editorial_importance.score;
+    }
+
     if (b.content_scores.total !== a.content_scores.total) {
       return b.content_scores.total - a.content_scores.total;
     }
