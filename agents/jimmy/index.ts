@@ -2,17 +2,18 @@
 // JIMMY AGENT
 // Gamesmith Research Director
 //
-// Mission:
-// Jimmy is an intelligence analyst, not a news scraper.
-// He scans sources, filters old/seen items, analyzes new developments,
-// and returns ranked story candidates for William.
+// v0.3 Mission:
+// Find articles, package them into stories,
+// enforce scoring rules, and present calibrated
+// story packages to William.
 // ==================================================
 
 import fs from "fs";
 import path from "path";
 import Parser from "rss-parser";
-import { Story } from "./types";
 import { analyzeStory } from "./analyze";
+import { packageStories } from "./packageStories";
+import { ArticleForPackaging, StoryPackage } from "./types-package";
 
 const parser = new Parser();
 
@@ -65,8 +66,8 @@ function getStorySummary(item: Parser.Item) {
   return item.contentSnippet || item.content || item.summary || item.title || "";
 }
 
-export async function runJimmy(): Promise<Story[]> {
-  const allStories: Story[] = [];
+export async function runJimmy(): Promise<StoryPackage[]> {
+  const articleRecords: ArticleForPackaging[] = [];
   const sources = loadSources();
   const memory = loadMemory();
 
@@ -88,16 +89,17 @@ export async function runJimmy(): Promise<Story[]> {
 
       const items = unseenItems.slice(0, 10);
 
-      const analyzedStories: Story[] = await Promise.all(
+      const analyzedArticles: ArticleForPackaging[] = await Promise.all(
         items.map(async (item) => {
           const title = item.title || "Untitled Story";
           const summary = getStorySummary(item);
+          const url = item.link || "";
 
           const analysisRaw = await analyzeStory(title, summary);
           const analysis = JSON.parse(analysisRaw || "{}");
 
           memory.push({
-            url: item.link || title,
+            url: url || title,
             title,
             source: source.name,
             dateSeen: new Date().toISOString(),
@@ -106,6 +108,8 @@ export async function runJimmy(): Promise<Story[]> {
           return {
             title,
             source: source.name,
+            url,
+            summary,
             storyArc: analysis.storyArc || source.mission_fit[0] || "Other",
             contentScore: analysis.contentScore || 0,
             timeScore: analysis.timeScore || 0,
@@ -119,32 +123,23 @@ export async function runJimmy(): Promise<Story[]> {
         })
       );
 
-      allStories.push(...analyzedStories);
+      articleRecords.push(...analyzedArticles);
     } catch (error) {
       console.error(`Jimmy failed source: ${source.name}`, error);
-
-      allStories.push({
-        title: `Jimmy could not read ${source.name}`,
-        source: source.name,
-        storyArc: "Other",
-        contentScore: 0,
-        timeScore: 0,
-        freshness: "Expired",
-        recommended: "Archived",
-        whyGamersCare: "This source failed, but Jimmy kept running.",
-      });
     }
   }
 
   saveMemory(memory);
 
-  allStories.sort((a, b) => {
-    if (b.contentScore !== a.contentScore) {
-      return b.contentScore - a.contentScore;
+  const packages = await packageStories(articleRecords);
+
+  packages.sort((a, b) => {
+    if (b.content_scores.total !== a.content_scores.total) {
+      return b.content_scores.total - a.content_scores.total;
     }
 
-    return b.timeScore - a.timeScore;
+    return b.time_scores.total - a.time_scores.total;
   });
 
-  return allStories;
+  return packages;
 }
