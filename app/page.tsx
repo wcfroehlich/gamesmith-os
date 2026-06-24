@@ -293,23 +293,57 @@ export default function Home() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                <button className="rounded bg-green-600 px-3 py-2 text-sm font-semibold">
-                  Bank
-                </button>
+  <button
+    onClick={async () => {
+      await fetch("/api/gamesmith/bank-story", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(storyPackage),
+      });
 
-                <button className="rounded bg-red-600 px-3 py-2 text-sm font-semibold">
-                  Reject
-                </button>
+      setPackages((current) =>
+        current.filter((item) => item.story_title !== storyPackage.story_title)
+      );
 
-                <button
-                  onClick={() =>
-                    setExpanded(isExpanded ? null : storyPackage.story_title)
-                  }
-                  className="rounded bg-slate-700 px-3 py-2 text-sm font-semibold"
-                >
-                  {isExpanded ? "Hide Details" : "Expand Details"}
-                </button>
-              </div>
+      alert("Story banked");
+    }}
+    className="rounded bg-green-600 px-3 py-2 text-sm font-semibold"
+  >
+    Bank
+  </button>
+
+  <button
+    onClick={async () => {
+      await fetch("/api/gamesmith/reject-story", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(storyPackage),
+      });
+
+      setPackages((current) =>
+        current.filter((item) => item.story_title !== storyPackage.story_title)
+      );
+
+      alert("Story archived");
+    }}
+    className="rounded bg-red-600 px-3 py-2 text-sm font-semibold"
+  >
+    Reject
+  </button>
+
+  <button
+    onClick={() =>
+      setExpanded(isExpanded ? null : storyPackage.story_title)
+    }
+    className="rounded bg-slate-700 px-3 py-2 text-sm font-semibold"
+  >
+    {isExpanded ? "Hide Details" : "Expand Details"}
+  </button>
+</div>
 
               {isExpanded && (
                 <div className="mt-5 rounded-lg border border-slate-700 bg-slate-950 p-4">
