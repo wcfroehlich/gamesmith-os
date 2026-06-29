@@ -1,0 +1,346 @@
+name: Phase 1 Production Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type APPLY_PHASE1_TO_JIMMY_PRODUCTION to run the Jimmy production migration'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase1-production-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Apply Phase 1 schema and live import
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPECTED_REPOSITORY: wcfroehlich/gamesmith-os
+      PROJECT_REF: auzjilvjqjblgysargum
+      EXPECTED_COMMIT: ca33b24e08780509d5c88b5bf635762b2dba3366
+      MIGRATION_FILE: supabase/migrations/20260628000000_phase1_canonical_newsroom.sql
+      MIGRATION_NAME: 20260628000000_phase1_canonical_newsroom
+      EXPECTED_SHA256: 1d300efc11bb9d9673b79c572a933879c990f14723a8979a56336541e92a1f81
+      CONFIRMATION_PHRASE: APPLY_PHASE1_TO_JIMMY_PRODUCTION
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      DB_HOST: db.auzjilvjqjblgysargum.supabase.co
+      DB_NAME: postgres
+      DB_USER: postgres
+      PGSSLMODE: require
+
+    steps:
+      - name: Gate manual confirmation
+        run: |
+          set -euo pipefail
+          if [ "${{ github.repository }}" != "$EXPECTED_REPOSITORY" ]; then
+            echo "Unexpected repository: ${{ github.repository }}"
+            exit 1
+          fi
+          if [ "${{ inputs.confirmation }}" != "$CONFIRMATION_PHRASE" ]; then
+            echo "Confirmation phrase did not match."
+            exit 1
+          fi
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "Required GitHub secrets are missing."
+            exit 1
+          fi
+          echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          echo "Repository: ${{ github.repository }}"
+          echo "Target Supabase project ref: $PROJECT_REF"
+          echo "Expected commit: $EXPECTED_COMMIT"
+
+      - name: Check out expected commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_COMMIT }}
+          persist-credentials: false
+
+      - name: Verify commit and migration checksum
+        run: |
+          set -euo pipefail
+          actual_head="$(git rev-parse HEAD)"
+          if [ "$actual_head" != "$EXPECTED_COMMIT" ]; then
+            echo "HEAD mismatch: $actual_head"
+            exit 1
+          fi
+          if [ ! -f "$MIGRATION_FILE" ]; then
+            echo "Missing migration file: $MIGRATION_FILE"
+            exit 1
+          fi
+          migration_count="$(find supabase/migrations -type f -name '*.sql' | wc -l | tr -d ' ')"
+          if [ "$migration_count" != "1" ]; then
+            echo "Expected exactly one migration file, found $migration_count"
+            find supabase/migrations -type f -name '*.sql' -print
+            exit 1
+          fi
+          actual_sha="$(sha256sum "$MIGRATION_FILE" | awk '{print $1}')"
+          if [ "$actual_sha" != "$EXPECTED_SHA256" ]; then
+            echo "Migration checksum mismatch: $actual_sha"
+            exit 1
+          fi
+          echo "Commit verified: $actual_head"
+          echo "Migration file verified: $MIGRATION_FILE"
+          echo "Migration SHA-256: $actual_sha"
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Build database connection
+        run: |
+          set -euo pipefail
+          db_url="postgresql://$DB_USER:$SUPABASE_DB_PASSWORD@$DB_HOST:5432/$DB_NAME?sslmode=require"
+          echo "::add-mask::$db_url"
+          echo "DATABASE_URL=$db_url" >> "$GITHUB_ENV"
+
+      - name: Check pre-migration legacy baseline
+        run: |
+          set -euo pipefail
+          counts_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "
+            select jsonb_object_agg(table_name, row_count)::text
+            from (
+              select 'jimmy_memory' as table_name, count(*)::integer as row_count from public.jimmy_memory
+              union all select 'story_bank', count(*)::integer from public.story_bank
+              union all select 'story_archive', count(*)::integer from public.story_archive
+              union all select 'daily_runs', count(*)::integer from public.daily_runs
+              union all select 'watch_list', count(*)::integer from public.watch_list
+            ) counts;
+          ")"
+          echo "Pre-migration legacy counts: $counts_json"
+          COUNTS_JSON="$counts_json" node <<'NODE'
+          const expected = {
+            jimmy_memory: 135,
+            story_bank: 1,
+            story_archive: 0,
+            daily_runs: 0,
+            watch_list: 0,
+          };
+          const actual = JSON.parse(process.env.COUNTS_JSON);
+          const mismatches = Object.entries(expected).filter(([key, value]) => actual[key] !== value);
+          if (mismatches.length) {
+            console.error("Baseline mismatch:", JSON.stringify({ expected, actual, mismatches }));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Supabase migration dry run
+        run: |
+          set -euo pipefail
+          supabase db push --dry-run
+
+      - name: Apply committed Phase 1 schema migration
+        run: |
+          set -euo pipefail
+          supabase db push
+          echo "Applied migration name: $MIGRATION_NAME"
+
+      - name: Verify schema, RLS, triggers, functions, and seed records
+        run: |
+          set -euo pipefail
+          schema_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "
+            with expected_tables(table_name) as (
+              values
+                ('workspaces'), ('actors'), ('workspace_memberships'), ('departments'),
+                ('newsroom_objects'), ('migration_batches'), ('source_registry_configs'),
+                ('ingestion_runs'), ('ingestion_items'), ('source_material'), ('stories'),
+                ('story_source_links'), ('legacy_import_payloads'), ('editorial_decisions'),
+                ('work_items'), ('activity_events')
+            ),
+            table_checks as (
+              select e.table_name, c.relrowsecurity as rls_enabled
+              from expected_tables e
+              left join pg_class c on c.relname = e.table_name
+              left join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
+              where c.relkind = 'r'
+            ),
+            function_checks as (
+              select proname
+              from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and proname in ('import_live_jimmy_legacy', 'validate_phase1_migration', 'transition_story_triage')
+            ),
+            trigger_checks as (
+              select tgname
+              from pg_trigger
+              where not tgisinternal
+                and tgname in (
+                  'activity_events_append_only',
+                  'editorial_decisions_append_only',
+                  'ingestion_runs_append_only',
+                  'migration_batches_append_only',
+                  'legacy_import_payloads_append_only',
+                  'stories_prevent_merge_cycle',
+                  'stories_validate_state'
+                )
+            ),
+            seed_checks as (
+              select
+                exists(select 1 from workspaces where slug = 'gamesmith-news') as workspace_seeded,
+                exists(select 1 from actors where display_name = 'William' and actor_type = 'human') as william_seeded,
+                exists(select 1 from actors where display_name = 'Jimmy' and actor_type = 'agent') as jimmy_seeded,
+                exists(select 1 from actors where display_name = 'Gamesmith Import System' and actor_type = 'system') as import_actor_seeded
+            )
+            select jsonb_build_object(
+              'tables', (select jsonb_object_agg(table_name, rls_enabled) from table_checks),
+              'functions', (select jsonb_agg(proname order by proname) from function_checks),
+              'triggers', (select jsonb_agg(tgname order by tgname) from trigger_checks),
+              'seeds', (select to_jsonb(seed_checks) from seed_checks)
+            )::text;
+          ")"
+          echo "Post-schema verification: $schema_json"
+          SCHEMA_JSON="$schema_json" node <<'NODE'
+          const result = JSON.parse(process.env.SCHEMA_JSON);
+          const expectedTables = [
+            "workspaces", "actors", "workspace_memberships", "departments",
+            "newsroom_objects", "migration_batches", "source_registry_configs",
+            "ingestion_runs", "ingestion_items", "source_material", "stories",
+            "story_source_links", "legacy_import_payloads", "editorial_decisions",
+            "work_items", "activity_events"
+          ];
+          const missingTables = expectedTables.filter((table) => !(table in (result.tables || {})));
+          const noRls = expectedTables.filter((table) => result.tables?.[table] !== true);
+          const expectedFunctions = ["import_live_jimmy_legacy", "transition_story_triage", "validate_phase1_migration"];
+          const functions = new Set(result.functions || []);
+          const missingFunctions = expectedFunctions.filter((name) => !functions.has(name));
+          const expectedTriggers = [
+            "activity_events_append_only",
+            "editorial_decisions_append_only",
+            "ingestion_runs_append_only",
+            "migration_batches_append_only",
+            "legacy_import_payloads_append_only",
+            "stories_prevent_merge_cycle",
+            "stories_validate_state"
+          ];
+          const triggers = new Set(result.triggers || []);
+          const missingTriggers = expectedTriggers.filter((name) => !triggers.has(name));
+          const seeds = result.seeds || {};
+          const missingSeeds = Object.entries(seeds).filter(([, value]) => value !== true).map(([key]) => key);
+          if (missingTables.length || noRls.length || missingFunctions.length || missingTriggers.length || missingSeeds.length) {
+            console.error(JSON.stringify({ missingTables, noRls, missingFunctions, missingTriggers, missingSeeds }, null, 2));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Run DB-native live import dry run
+        run: |
+          set -euo pipefail
+          dry_run_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select import_live_jimmy_legacy(true)::text;")"
+          echo "Live import dry run: $dry_run_json"
+          DRY_RUN_JSON="$dry_run_json" node <<'NODE'
+          const expected = {
+            jimmy_memory: 135,
+            story_bank: 1,
+            story_archive: 0,
+            daily_runs: 0,
+            watch_list: 0,
+          };
+          const result = JSON.parse(process.env.DRY_RUN_JSON);
+          const actual = result.legacy_counts || {};
+          const mismatches = Object.entries(expected).filter(([key, value]) => actual[key] !== value);
+          if (result.dry_run !== true || mismatches.length) {
+            console.error("Dry-run mismatch:", JSON.stringify({ expected, actual, result, mismatches }));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Run DB-native live import apply
+        id: live_import
+        run: |
+          set -euo pipefail
+          applied_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select import_live_jimmy_legacy(false)::text;")"
+          echo "Live import apply result: $applied_json"
+          batch_id="$(APPLIED_JSON="$applied_json" node -e "const r=JSON.parse(process.env.APPLIED_JSON); if (!r.migration_batch_id) process.exit(1); console.log(r.migration_batch_id);")"
+          echo "migration_batch_id=$batch_id" >> "$GITHUB_OUTPUT"
+          echo "Migration batch ID: $batch_id"
+
+      - name: Validate live import batch
+        run: |
+          set -euo pipefail
+          batch_id="${{ steps.live_import.outputs.migration_batch_id }}"
+          validation_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select validate_phase1_migration('$batch_id'::uuid)::text;")"
+          batch_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select to_jsonb(migration_batches)::text from migration_batches where id = '$batch_id'::uuid;")"
+          echo "Validation output: $validation_json"
+          echo "Migration batch: $batch_json"
+          VALIDATION_JSON="$validation_json" BATCH_JSON="$batch_json" node <<'NODE'
+          const validation = JSON.parse(process.env.VALIDATION_JSON);
+          const batch = JSON.parse(process.env.BATCH_JSON);
+          const blockingKeys = [
+            "malformed_or_unresolved_payloads",
+            "imported_stories_without_legacy_payload",
+            "legacy_archive_unknown_rationale",
+            "story_bank_no_actionable_source_links",
+            "self_relations",
+            "merged_story_cycles"
+          ];
+          const blocking = blockingKeys.filter((key) => Number(validation[key] || 0) > 0);
+          if (batch.status !== "succeeded" || blocking.length > 0) {
+            console.error(JSON.stringify({ batchStatus: batch.status, blocking, validation }, null, 2));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Confirm legacy tables were not modified
+        run: |
+          set -euo pipefail
+          counts_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "
+            select jsonb_object_agg(table_name, row_count)::text
+            from (
+              select 'jimmy_memory' as table_name, count(*)::integer as row_count from public.jimmy_memory
+              union all select 'story_bank', count(*)::integer from public.story_bank
+              union all select 'story_archive', count(*)::integer from public.story_archive
+              union all select 'daily_runs', count(*)::integer from public.daily_runs
+              union all select 'watch_list', count(*)::integer from public.watch_list
+            ) counts;
+          ")"
+          echo "Post-import legacy counts: $counts_json"
+          COUNTS_JSON="$counts_json" node <<'NODE'
+          const expected = {
+            jimmy_memory: 135,
+            story_bank: 1,
+            story_archive: 0,
+            daily_runs: 0,
+            watch_list: 0,
+          };
+          const actual = JSON.parse(process.env.COUNTS_JSON);
+          const mismatches = Object.entries(expected).filter(([key, value]) => actual[key] !== value);
+          if (mismatches.length) {
+            console.error("Legacy table counts changed:", JSON.stringify({ expected, actual, mismatches }));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Summarize migration
+        run: |
+          set -euo pipefail
+          {
+            echo "## Phase 1 Production Migration"
+            echo ""
+            echo "- Repository: $EXPECTED_REPOSITORY"
+            echo "- Project ref: $PROJECT_REF"
+            echo "- Commit: $EXPECTED_COMMIT"
+            echo "- Migration: $MIGRATION_NAME"
+            echo "- Migration SHA-256: $EXPECTED_SHA256"
+            echo "- Migration batch ID: ${{ steps.live_import.outputs.migration_batch_id }}"
+            echo "- Vercel deployment: not performed by this workflow"
+          } >> "$GITHUB_STEP_SUMMARY"
