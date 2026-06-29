@@ -855,7 +855,7 @@ begin
           publisher_name,
           external_source_id,
           canonical_url,
-          normalized_url,
+          original_url,
           normalized_title,
           title,
           discovered_at,
