@@ -30,10 +30,7 @@ jobs:
       CONFIRMATION_PHRASE: APPLY_PHASE1_TO_JIMMY_PRODUCTION
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      DB_HOST: db.auzjilvjqjblgysargum.supabase.co
-      DB_NAME: postgres
-      DB_USER: postgres
-      PGSSLMODE: require
+      SUPABASE_SESSION_POOLER_URL: ${{ secrets.SUPABASE_SESSION_POOLER_URL }}
 
     steps:
       - name: Gate manual confirmation
@@ -47,12 +44,13 @@ jobs:
             echo "Confirmation phrase did not match."
             exit 1
           fi
-          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_SESSION_POOLER_URL" ]; then
             echo "Required GitHub secrets are missing."
             exit 1
           fi
           echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          printf '::add-mask::%s\n' "$SUPABASE_SESSION_POOLER_URL"
           echo "Repository: ${{ github.repository }}"
           echo "Target Supabase project ref: $PROJECT_REF"
           echo "Expected commit: $EXPECTED_COMMIT"
@@ -96,17 +94,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Build database connection
+      - name: Test session pooler connection
         run: |
           set -euo pipefail
-          db_url="postgresql://$DB_USER:$SUPABASE_DB_PASSWORD@$DB_HOST:5432/$DB_NAME?sslmode=require"
-          echo "::add-mask::$db_url"
-          echo "DATABASE_URL=$db_url" >> "$GITHUB_ENV"
+          psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "select 1;" >/dev/null
 
       - name: Check pre-migration legacy baseline
         run: |
           set -euo pipefail
-          counts_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "
+          counts_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "
             select jsonb_object_agg(table_name, row_count)::text
             from (
               select 'jimmy_memory' as table_name, count(*)::integer as row_count from public.jimmy_memory
@@ -157,7 +153,7 @@ jobs:
       - name: Verify schema, RLS, triggers, functions, and seed records
         run: |
           set -euo pipefail
-          schema_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "
+          schema_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "
             with expected_tables(table_name) as (
               values
                 ('workspaces'), ('actors'), ('workspace_memberships'), ('departments'),
@@ -245,7 +241,7 @@ jobs:
       - name: Run DB-native live import dry run
         run: |
           set -euo pipefail
-          dry_run_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select import_live_jimmy_legacy(true)::text;")"
+          dry_run_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "select import_live_jimmy_legacy(true)::text;")"
           echo "Live import dry run: $dry_run_json"
           DRY_RUN_JSON="$dry_run_json" node <<'NODE'
           const expected = {
@@ -268,7 +264,7 @@ jobs:
         id: live_import
         run: |
           set -euo pipefail
-          applied_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select import_live_jimmy_legacy(false)::text;")"
+          applied_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "select import_live_jimmy_legacy(false)::text;")"
           echo "Live import apply result: $applied_json"
           batch_id="$(APPLIED_JSON="$applied_json" node -e "const r=JSON.parse(process.env.APPLIED_JSON); if (!r.migration_batch_id) process.exit(1); console.log(r.migration_batch_id);")"
           echo "migration_batch_id=$batch_id" >> "$GITHUB_OUTPUT"
@@ -278,8 +274,8 @@ jobs:
         run: |
           set -euo pipefail
           batch_id="${{ steps.live_import.outputs.migration_batch_id }}"
-          validation_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select validate_phase1_migration('$batch_id'::uuid)::text;")"
-          batch_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "select to_jsonb(migration_batches)::text from migration_batches where id = '$batch_id'::uuid;")"
+          validation_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "select validate_phase1_migration('$batch_id'::uuid)::text;")"
+          batch_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "select to_jsonb(migration_batches)::text from migration_batches where id = '$batch_id'::uuid;")"
           echo "Validation output: $validation_json"
           echo "Migration batch: $batch_json"
           VALIDATION_JSON="$validation_json" BATCH_JSON="$batch_json" node <<'NODE'
@@ -306,7 +302,7 @@ jobs:
       - name: Confirm legacy tables were not modified
         run: |
           set -euo pipefail
-          counts_json="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "
+          counts_json="$(psql "${{ secrets.SUPABASE_SESSION_POOLER_URL }}" -v ON_ERROR_STOP=1 -tA -c "
             select jsonb_object_agg(table_name, row_count)::text
             from (
               select 'jimmy_memory' as table_name, count(*)::integer as row_count from public.jimmy_memory

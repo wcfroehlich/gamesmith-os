@@ -10,8 +10,10 @@ Add these repository secrets in `wcfroehlich/gamesmith-os` before running the wo
 
 - `SUPABASE_ACCESS_TOKEN`: Supabase access token allowed to link and push migrations for the Jimmy project.
 - `SUPABASE_DB_PASSWORD`: Database password for project `auzjilvjqjblgysargum`.
+- `SUPABASE_SESSION_POOLER_URL`: Session Pooler connection string from Jimmy's Supabase Connect panel. Fill in the database password locally before pasting the complete connection string into GitHub secrets.
 
 Do not commit secrets, echo them in logs, store them in Vercel variables for this migration, or place them in package scripts.
+Do not share or screenshot the Session Pooler connection string.
 
 ## Manual Launch
 
