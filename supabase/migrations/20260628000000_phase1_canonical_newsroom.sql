@@ -792,7 +792,7 @@ begin
       workspace_id,
       migration_batch_id,
       run_type,
-      started_by_actor_id,
+      triggered_by_actor_id,
       status,
       source_count
     )
@@ -859,7 +859,7 @@ begin
           normalized_title,
           title,
           discovered_at,
-          excerpt,
+          content_excerpt,
           content_hash
         )
         values (
@@ -892,12 +892,11 @@ begin
         source_material_id,
         migration_batch_id,
         discovered_url,
-        source_external_id,
+        external_source_id,
         raw_payload,
         duplicate_outcome,
-        story_creation_outcome,
-        processing_status,
-        processed_at
+        story_outcome,
+        processing_status
       )
       values (
         v_ingestion_run_id,
@@ -909,8 +908,7 @@ begin
         v_row,
         case when v_was_duplicate then 'duplicate_source'::duplicate_outcome else 'new_source'::duplicate_outcome end,
         'none',
-        'processed',
-        now()
+        'processed'
       );
     end loop;
   end if;
