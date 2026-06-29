@@ -1,36 +1,28 @@
 import { runJimmy } from "@/agents/jimmy";
+import { jsonError, requireWorkspaceActor } from "@/lib/canonical/identity";
+import { recordJimmyIntake } from "@/lib/canonical/stories";
 
 export async function GET() {
+  return Response.json(
+    { ok: false, error: "Use POST for authenticated Jimmy intake." },
+    { status: 405 }
+  );
+}
+
+export async function POST(request: Request) {
   try {
+    const actor = await requireWorkspaceActor(request);
     const stories = await runJimmy();
+    const intake = await recordJimmyIntake(actor, stories, "manual");
 
     return Response.json({
       agent: "Jimmy",
       runAt: new Date().toISOString(),
+      intake,
       stories,
     });
   } catch (error) {
     console.error("Run Jimmy API failed:", error);
-
-    return Response.json(
-      {
-        agent: "Jimmy",
-        runAt: new Date().toISOString(),
-        stories: [
-          {
-            title: "Jimmy API crashed",
-            source: "System",
-            storyArc: "Other",
-            contentScore: 0,
-            timeScore: 0,
-            freshness: "Expired",
-            recommended: "Archive",
-            whyGamersCare:
-              error instanceof Error ? error.message : "Unknown API error.",
-          },
-        ],
-      },
-      { status: 200 }
-    );
+    return jsonError(error);
   }
 }

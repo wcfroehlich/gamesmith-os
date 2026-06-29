@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:phase1:dry": "node scripts/phase1-migration.mjs --dry-run",
+    "migrate:phase1:apply": "node scripts/phase1-migration.mjs --apply",
+    "seed:william-membership": "node scripts/seed-william-membership.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -1,13 +1,18 @@
-import { rejectStory } from "@/lib/storyVault";
+import { requireWorkspaceActor, jsonError } from "@/lib/canonical/identity";
+import { transitionPackageTriage } from "@/lib/canonical/stories";
 
 export async function POST(request: Request) {
-  const storyPackage = await request.json();
+  try {
+    const actor = await requireWorkspaceActor(request);
+    const storyPackage = await request.json();
+    const result = await transitionPackageTriage(actor, storyPackage, "bad");
 
-  const rejectedStory = await rejectStory(storyPackage);
-
-  return Response.json({
-    ok: true,
-    status: "Archived",
-    story: rejectedStory,
-  });
+    return Response.json({
+      ok: true,
+      status: "Archived",
+      result,
+    });
+  } catch (error) {
+    return jsonError(error);
+  }
 }

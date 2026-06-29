@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { createBrowserSupabaseClient } from "@/lib/supabaseBrowser";
 
 type PackageArticle = {
   title: string;
@@ -79,36 +81,131 @@ type StoryPackage = {
 };
 
 export default function Home() {
+  const maintenanceMode =
+    process.env.NEXT_PUBLIC_GAMESMITH_MAINTENANCE_MODE === "true";
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [packages, setPackages] = useState<StoryPackage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [exportText, setExportText] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    let supabase: ReturnType<typeof createBrowserSupabaseClient>;
+
+    try {
+      supabase = createBrowserSupabaseClient();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Auth is not configured.");
+      setAuthLoading(false);
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function signIn() {
+    setAuthError("");
+    setAuthLoading(true);
+
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setAuthError(error.message);
+        setAuthLoading(false);
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Sign in failed.");
+      setAuthLoading(false);
+    }
+  }
+
+  async function signOut() {
+    const supabase = createBrowserSupabaseClient();
+    await supabase.auth.signOut();
+    setPackages([]);
+    setExportText("");
+  }
+
+  function authHeaders(extra?: HeadersInit): HeadersInit {
+    if (!session?.access_token) {
+      throw new Error("Sign in before using Assignment Desk actions.");
+    }
+
+    return {
+      ...extra,
+      Authorization: `Bearer ${session.access_token}`,
+    };
+  }
 
   async function runJimmy() {
     setLoading(true);
 
-    const response = await fetch("/api/gamesmith/run-jimmy");
+    let response: Response;
+    try {
+      response = await fetch("/api/gamesmith/run-jimmy", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Jimmy intake failed");
+      setLoading(false);
+      return;
+    }
     const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error || "Jimmy intake failed");
+      setLoading(false);
+      return;
+    }
 
     setPackages(data.stories);
     setLoading(false);
   }
 
-  async function resetMemory() {
-    setResetting(true);
-
-    await fetch("/api/gamesmith/reset-memory", {
-      method: "POST",
-    });
-
-    setPackages([]);
-    setResetting(false);
-    alert("Jimmy memory cleared");
-  }
-
   async function exportBankToBuffer() {
-    const response = await fetch("/api/gamesmith/export-buffer");
+    let response: Response;
+    try {
+      response = await fetch("/api/gamesmith/export-buffer", {
+        headers: authHeaders(),
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Export failed");
+      return;
+    }
+
+    if (!response.ok) {
+      const data = await response.json();
+      alert(data.error || "Export failed");
+      return;
+    }
+
     const text = await response.text();
 
     setExportText(text);
@@ -118,16 +215,84 @@ export default function Home() {
     alert("Jimmy Buffer export copied. Paste it into the Jimmy Buffer sheet.");
   }
 
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-slate-950 p-6 text-white">
+        <h1 className="text-4xl font-bold">Gamesmith OS</h1>
+        <p className="mt-4 text-slate-300">Checking Assignment Desk access...</p>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return (
+      <main className="min-h-screen bg-slate-950 p-6 text-white">
+        <section className="mx-auto mt-16 max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+          <h1 className="text-3xl font-bold">Gamesmith OS</h1>
+          {maintenanceMode ? (
+            <div className="mt-4 rounded-lg border border-amber-500/50 bg-amber-950/40 p-3 text-sm text-amber-100">
+              Gamesmith OS is in a controlled maintenance window. William can
+              sign in for migration smoke testing.
+            </div>
+          ) : (
+            <p className="mt-2 text-slate-300">
+              Sign in to access the Assignment Desk.
+            </p>
+          )}
+
+          <div className="mt-6 grid gap-3">
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              placeholder="Email"
+              className="rounded bg-slate-950 px-3 py-2 text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500"
+            />
+            <input
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              placeholder="Password"
+              className="rounded bg-slate-950 px-3 py-2 text-white outline-none ring-1 ring-slate-700 focus:ring-blue-500"
+            />
+            {authError && <p className="text-sm text-red-300">{authError}</p>}
+            <button
+              onClick={signIn}
+              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white"
+            >
+              Sign In
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-white">
       <h1 className="text-4xl font-bold">Gamesmith OS</h1>
-      <p className="mt-2 text-slate-300">Editorial Operating System</p>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-slate-300">
+        <p>Editorial Operating System</p>
+        <button
+          onClick={signOut}
+          className="rounded bg-slate-800 px-3 py-2 text-sm font-semibold"
+        >
+          Sign Out
+        </button>
+      </div>
+
+      {maintenanceMode && (
+        <div className="mt-6 rounded-lg border border-amber-500/50 bg-amber-950/40 p-4 text-amber-100">
+          Maintenance mode is active. Keep public access paused until the Phase
+          1 migration smoke tests pass.
+        </div>
+      )}
 
       <section className="mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
-        <h2 className="text-2xl font-semibold">Jimmy Research Director</h2>
+        <h2 className="text-2xl font-semibold">Jimmy Assignment Desk</h2>
         <p className="mt-2 text-slate-300">
-          Jimmy packages stories, scores them, checks risk, and prepares them
-          for William&apos;s review.
+          Jimmy discovers source material, proposes Story candidates, and routes
+          them for William&apos;s review inside Gamesmith OS.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-3">
@@ -137,14 +302,6 @@ export default function Home() {
             className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
           >
             {loading ? "Running Jimmy..." : "Run Jimmy"}
-          </button>
-
-          <button
-            onClick={resetMemory}
-            disabled={resetting}
-            className="rounded-lg bg-red-700 px-4 py-2 font-semibold text-white disabled:opacity-50"
-          >
-            {resetting ? "Resetting..." : "Reset Jimmy Memory"}
           </button>
 
           <button
@@ -327,13 +484,29 @@ export default function Home() {
               <div className="mt-5 flex flex-wrap gap-2">
                 <button
                   onClick={async () => {
-                    await fetch("/api/gamesmith/bank-story", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify(storyPackage),
-                    });
+                    let response: Response;
+                    try {
+                      response = await fetch("/api/gamesmith/bank-story", {
+                        method: "POST",
+                        headers: authHeaders({
+                          "Content-Type": "application/json",
+                        }),
+                        body: JSON.stringify(storyPackage),
+                      });
+                    } catch (error) {
+                      alert(
+                        error instanceof Error
+                          ? error.message
+                          : "Story Bank move failed"
+                      );
+                      return;
+                    }
+
+                    if (!response.ok) {
+                      const data = await response.json();
+                      alert(data.error || "Story Bank move failed");
+                      return;
+                    }
 
                     setPackages((current) =>
                       current.filter(
@@ -345,18 +518,32 @@ export default function Home() {
                   }}
                   className="rounded bg-green-600 px-3 py-2 text-sm font-semibold"
                 >
-                  Bank
+                  Move to Story Bank
                 </button>
 
                 <button
                   onClick={async () => {
-                    await fetch("/api/gamesmith/reject-story", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify(storyPackage),
-                    });
+                    let response: Response;
+                    try {
+                      response = await fetch("/api/gamesmith/reject-story", {
+                        method: "POST",
+                        headers: authHeaders({
+                          "Content-Type": "application/json",
+                        }),
+                        body: JSON.stringify(storyPackage),
+                      });
+                    } catch (error) {
+                      alert(
+                        error instanceof Error ? error.message : "Archive failed"
+                      );
+                      return;
+                    }
+
+                    if (!response.ok) {
+                      const data = await response.json();
+                      alert(data.error || "Archive failed");
+                      return;
+                    }
 
                     setPackages((current) =>
                       current.filter(
@@ -368,7 +555,7 @@ export default function Home() {
                   }}
                   className="rounded bg-red-600 px-3 py-2 text-sm font-semibold"
                 >
-                  Reject
+                  Archive
                 </button>
 
                 <button
