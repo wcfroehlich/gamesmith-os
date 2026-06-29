@@ -7,8 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate:phase1:dry": "node scripts/phase1-migration.mjs --dry-run",
-    "migrate:phase1:apply": "node scripts/phase1-migration.mjs --apply",
+    "migrate:phase1:fixture:dry": "node scripts/phase1-fixture-migration.mjs --dry-run",
+    "migrate:phase1:fixture:apply": "node scripts/phase1-fixture-migration.mjs --apply",
+    "migrate:phase1:production:dry": "node scripts/phase1-production-migration.mjs --dry-run",
+    "migrate:phase1:production:apply": "node scripts/phase1-production-migration.mjs --apply",
+    "seed:source-registry": "node scripts/seed-source-registry.mjs",
     "seed:william-membership": "node scripts/seed-william-membership.mjs"
   },
   "dependencies": {

@@ -7,6 +7,7 @@ const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
 const dryRun = !apply || args.has("--dry-run");
 const migrationVersion = "phase1-canonical-newsroom-20260628";
+const PRODUCTION_PROJECT_REF = "auzjilvjqjblgysargum";
 
 function readJson(relativePath, fallback) {
   const fullPath = path.join(root, relativePath);
@@ -112,6 +113,15 @@ function requireSupabase() {
     throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
   }
 
+  const urlRef = new URL(url).host.split(".")[0];
+  const envRef = process.env.SUPABASE_PROJECT_REF;
+  if (urlRef === PRODUCTION_PROJECT_REF || envRef === PRODUCTION_PROJECT_REF) {
+    throw new Error(
+      "Refusing to import local fixture Story data into the Jimmy production project."
+    );
+  }
+
+  console.log(`Fixture migration target Supabase project ref: ${envRef || urlRef}`);
   return { url, key };
 }
 

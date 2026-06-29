@@ -951,6 +951,111 @@ $$;
 revoke all on function import_live_jimmy_legacy(boolean) from public;
 grant execute on function import_live_jimmy_legacy(boolean) to service_role;
 
+create or replace function validate_phase1_migration(p_migration_batch_id uuid)
+returns jsonb
+language plpgsql
+stable
+as $$
+declare
+  v_result jsonb;
+begin
+  select jsonb_build_object(
+    'migration_batch_id', p_migration_batch_id,
+    'payload_status_counts', coalesce((
+      select jsonb_object_agg(migration_status, payload_count)
+      from (
+        select migration_status::text, count(*) as payload_count
+        from legacy_import_payloads
+        where migration_batch_id = p_migration_batch_id
+        group by migration_status
+      ) status_counts
+    ), '{}'::jsonb),
+    'malformed_or_unresolved_payloads', (
+      select count(*)
+      from legacy_import_payloads
+      where migration_batch_id = p_migration_batch_id
+        and migration_status in ('malformed', 'unresolved', 'error')
+    ),
+    'imported_stories_without_legacy_payload', (
+      select count(*)
+      from stories s
+      left join legacy_import_payloads p on p.canonical_story_id = s.id
+      where s.migration_batch_id = p_migration_batch_id
+        and p.id is null
+    ),
+    'imported_stories_without_source_material', (
+      select count(*)
+      from stories s
+      left join story_source_links ssl on ssl.story_id = s.id
+      where s.migration_batch_id = p_migration_batch_id
+        and ssl.id is null
+    ),
+    'legacy_archive_unknown_rationale', (
+      select count(*)
+      from legacy_import_payloads
+      where migration_batch_id = p_migration_batch_id
+        and legacy_source_system = 'story_archive'
+        and coalesce(payload->>'why_it_cannot_be_ignored', payload->>'score_reasoning', '') = ''
+    ),
+    'story_bank_no_actionable_source_links', (
+      select count(*)
+      from (
+        select p.id
+        from legacy_import_payloads p
+        join stories s on s.id = p.canonical_story_id
+        left join story_source_links ssl on ssl.story_id = s.id
+        left join source_material sm on sm.id = ssl.source_material_id
+        where p.migration_batch_id = p_migration_batch_id
+          and s.portfolio_lane = 'story_bank'
+        group by p.id
+        having count(sm.canonical_url) = 0
+      ) missing_links
+    ),
+    'canonical_story_key_collisions', (
+      select count(*)
+      from (
+        select workspace_id, canonical_key
+        from stories
+        where canonical_key is not null
+        group by workspace_id, canonical_key
+        having count(*) > 1
+      ) collisions
+    ),
+    'self_relations', (
+      select count(*)
+      from story_relations
+      where from_story_id = to_story_id
+    ),
+    'merged_story_cycles', (
+      with recursive merge_paths as (
+        select id as origin_id, merged_into_story_id as next_id, array[id] as path
+        from stories
+        where merged_into_story_id is not null
+        union all
+        select mp.origin_id, s.merged_into_story_id, mp.path || s.id
+        from merge_paths mp
+        join stories s on s.id = mp.next_id
+        where s.merged_into_story_id is not null
+          and not s.id = any(mp.path)
+      )
+      select count(*)
+      from merge_paths
+      where next_id = any(path)
+    ),
+    'legacy_payloads_missing_batch', (
+      select count(*)
+      from legacy_import_payloads
+      where migration_batch_id is null
+    )
+  ) into v_result;
+
+  return v_result;
+end;
+$$;
+
+revoke all on function validate_phase1_migration(uuid) from public;
+grant execute on function validate_phase1_migration(uuid) to service_role;
+
 create or replace function prevent_story_merge_cycle()
 returns trigger
 language plpgsql

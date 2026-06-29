@@ -24,7 +24,7 @@ where s.migration_batch_id = :migration_batch_id
 select count(*) as legacy_archive_unknown_rationale
 from legacy_import_payloads
 where migration_batch_id = :migration_batch_id
-  and legacy_source_system like '%story-archive%'
+  and legacy_source_system in ('story_archive', 'data/story-archive.json')
   and coalesce(payload->>'why_it_cannot_be_ignored', payload->>'score_reasoning', '') = '';
 
 select count(*) as story_bank_no_actionable_source_links
