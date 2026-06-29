@@ -58,7 +58,7 @@ jobs:
           echo "Expected commit: $EXPECTED_COMMIT"
 
       - name: Check out expected commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: ${{ env.EXPECTED_COMMIT }}
           persist-credentials: false
@@ -134,7 +134,7 @@ jobs:
           NODE
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
         with:
           version: latest
 
@@ -288,10 +288,13 @@ jobs:
           const blockingKeys = [
             "malformed_or_unresolved_payloads",
             "imported_stories_without_legacy_payload",
+            "imported_stories_without_source_material",
             "legacy_archive_unknown_rationale",
             "story_bank_no_actionable_source_links",
+            "canonical_story_key_collisions",
             "self_relations",
-            "merged_story_cycles"
+            "merged_story_cycles",
+            "legacy_payloads_missing_batch"
           ];
           const blocking = blockingKeys.filter((key) => Number(validation[key] || 0) > 0);
           if (batch.status !== "succeeded" || blocking.length > 0) {
