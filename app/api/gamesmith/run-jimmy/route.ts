@@ -1,6 +1,11 @@
 import { runJimmy } from "@/agents/jimmy";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const secret = process.env.JIMMY_CRON_SECRET;
+  const authHeader = request.headers.get("authorization");
+  if (!secret || authHeader !== `Bearer ${secret}`) {
+    return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const stories = await runJimmy();
 
